@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+venv/
+.streamlit/secrets.toml
+
+data/db/*.sqlite3
+data/db/*.db
+!data/db/.gitkeep

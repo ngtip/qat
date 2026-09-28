@@ -1,0 +1,8 @@
+streamlit>=1.38
+pandas
+rapidfuzz
+
+# --- 各段階を実装する際に追加予定 ---
+# openai / azure-ai-* 等          (azure_provider.py 実装時)
+# sentence-transformers 等         (意味的な類似度チェック追加時)
+# mecab-python3 / janome / sudachipy 等  (日本語ワードマイニング実装時)
