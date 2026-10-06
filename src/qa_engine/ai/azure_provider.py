@@ -1,21 +1,12 @@
-"""本番想定、Azure の API を呼び出すプロバイダ。"""
+"""Azure OpenAI を呼び出すプロバイダ。接続は今後実装する。"""
 
-from qa_engine.ai.base import AIProvider, ColumnSuggestion, HeaderInfo, WordMiningResult
+from qa_engine.ai.base import AIProvider, ProviderNotConfiguredError
 
 
 class AzureProvider(AIProvider):
-    def __init__(self, endpoint: str, api_key: str, deployment: str):
+    def __init__(self, endpoint: str | None, deployment: str | None):
         self.endpoint = endpoint
-        self.api_key = api_key
         self.deployment = deployment
 
-    def extract_header(self, raw_text: str) -> HeaderInfo:
-        raise NotImplementedError
-
-    def suggest_columns(
-        self, headers: list[str], sample_rows: list[dict]
-    ) -> list[ColumnSuggestion]:
-        raise NotImplementedError
-
-    def mine_words(self, texts: list[str]) -> list[WordMiningResult]:
-        raise NotImplementedError
+    def complete(self, prompt: str) -> str:
+        raise ProviderNotConfiguredError("Azure OpenAI の接続先は未設定です(今後対応予定)。")

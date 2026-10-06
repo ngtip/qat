@@ -8,3 +8,6 @@ venv/
 data/db/*.sqlite3
 data/db/*.db
 !data/db/.gitkeep
+
+# ベンチマーク結果(scripts/benchmark_decisions.py)
+data/bench/

@@ -15,21 +15,36 @@ def update_session_status(conn: sqlite3.Connection, session_id: int, status: str
     conn.commit()
 
 
-def save_headers(
-    conn: sqlite3.Connection,
-    session_id: int,
-    columns: list[str],
-    ai_suggested_columns: set[str] | None = None,
-) -> None:
-    ai_suggested_columns = ai_suggested_columns or set(columns)
+def save_headers(conn: sqlite3.Connection, session_id: int, columns: list[str]) -> None:
     for position, col in enumerate(columns):
         conn.execute(
             "INSERT OR REPLACE INTO session_headers "
             "(session_id, column_name, position, ai_suggested, user_selected) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (session_id, col, position, 1 if col in ai_suggested_columns else 0, 0),
+            "VALUES (?, ?, ?, 0, 0)",
+            (session_id, col, position),
         )
     conn.commit()
+
+
+def save_column_suggestions(
+    conn: sqlite3.Connection, session_id: int, suggestions: list, roles: dict[str, str]
+) -> None:
+    """AI(または簡易判定)の提案と、ユーザーが確定した役割を保存する。"""
+    for s in suggestions:
+        conn.execute(
+            "UPDATE session_headers SET detected_type = ?, ai_suggested = ?, ai_reason = ? "
+            "WHERE session_id = ? AND column_name = ?",
+            (roles.get(s.column_name, s.role), int(s.recommended), s.reason, session_id, s.column_name),
+        )
+    conn.commit()
+
+
+def get_column_roles(conn: sqlite3.Connection, session_id: int) -> dict[str, str]:
+    rows = conn.execute(
+        "SELECT column_name, detected_type FROM session_headers WHERE session_id = ? ORDER BY position",
+        (session_id,),
+    ).fetchall()
+    return {r["column_name"]: r["detected_type"] or "other" for r in rows}
 
 
 def get_headers(conn: sqlite3.Connection, session_id: int) -> list[sqlite3.Row]:
@@ -128,15 +143,15 @@ def save_word_mining_results(
     for r in results:
         conn.execute(
             "INSERT INTO word_mining_results "
-            "(session_id, term, frequency, ai_score, user_weight) VALUES (?, ?, ?, ?, ?)",
-            (session_id, r["term"], r["frequency"], r["ai_score"], r.get("user_weight")),
+            "(session_id, term, frequency, ai_score, category, user_weight) VALUES (?, ?, ?, ?, ?, ?)",
+            (session_id, r["term"], r["frequency"], r["ai_score"], r.get("category"), r.get("user_weight")),
         )
     conn.commit()
 
 
 def get_word_mining_results(conn: sqlite3.Connection, session_id: int) -> list[sqlite3.Row]:
     return conn.execute(
-        "SELECT * FROM word_mining_results WHERE session_id = ? ORDER BY frequency DESC",
+        "SELECT * FROM word_mining_results WHERE session_id = ? ORDER BY ai_score DESC, frequency DESC",
         (session_id,),
     ).fetchall()
 
@@ -190,3 +205,34 @@ def get_quality_scores(conn: sqlite3.Connection, session_id: int) -> list[dict]:
 def clear_quality_scores(conn: sqlite3.Connection, session_id: int) -> None:
     conn.execute("DELETE FROM quality_scores WHERE session_id = ?", (session_id,))
     conn.commit()
+
+
+def log_ai_interaction(
+    conn: sqlite3.Connection,
+    session_id: int | None,
+    step: str,
+    provider: str,
+    prompt: str,
+    response: str,
+) -> int:
+    cur = conn.execute(
+        "INSERT INTO ai_interactions (session_id, step, provider, prompt, response) VALUES (?, ?, ?, ?, ?)",
+        (session_id, step, provider, prompt, response),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def bind_ai_interaction(conn: sqlite3.Connection, interaction_id: int, session_id: int) -> None:
+    conn.execute(
+        "UPDATE ai_interactions SET session_id = ? WHERE id = ? AND session_id IS NULL",
+        (session_id, interaction_id),
+    )
+    conn.commit()
+
+
+def get_ai_interactions(conn: sqlite3.Connection, session_id: int) -> list[dict]:
+    rows = conn.execute(
+        "SELECT * FROM ai_interactions WHERE session_id = ? ORDER BY id", (session_id,)
+    ).fetchall()
+    return [dict(r) for r in rows]

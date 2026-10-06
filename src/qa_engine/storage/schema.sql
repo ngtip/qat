@@ -11,8 +11,9 @@ CREATE TABLE IF NOT EXISTS session_headers (
     session_id INTEGER NOT NULL REFERENCES sessions(id),
     column_name TEXT NOT NULL,
     position INTEGER NOT NULL,
-    detected_type TEXT,
+    detected_type TEXT,  -- 列の役割(qa_engine.ai.base.ROLES のキー)
     ai_suggested INTEGER NOT NULL DEFAULT 0,
+    ai_reason TEXT,
     user_selected INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (session_id, column_name)
 );
@@ -42,7 +43,20 @@ CREATE TABLE IF NOT EXISTS word_mining_results (
     term TEXT NOT NULL,
     frequency INTEGER,
     ai_score REAL,
+    category TEXT,
     user_weight REAL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- AIとのやり取りの記録(どのデータをどの呼び先に送ったかを追跡する)。
+-- 取込確定前のヘッダ検出は session_id が NULL のまま記録し、確定時に紐付ける。
+CREATE TABLE IF NOT EXISTS ai_interactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id INTEGER REFERENCES sessions(id),
+    step TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    prompt TEXT NOT NULL,
+    response TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

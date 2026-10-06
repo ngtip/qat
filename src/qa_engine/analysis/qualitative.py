@@ -1,22 +1,15 @@
-"""定性分析: ワードマイニングと、ユーザーの重み付け結果の統合。"""
+"""定性分析: AIを使わない簡易ワードマイニングと、ユーザーの重み付けの集約。"""
 
 import re
 from collections import Counter
 
-from qa_engine.ai.base import AIProvider, WordMiningResult
+from qa_engine.ai.base import WordMiningResult
 
 _TOKEN_PATTERN = re.compile(r"[一-龥々ぁ-んァ-ヶーa-zA-Z0-9]{2,}")
 
 
-def mine_words(provider: AIProvider, texts: list[str]) -> list[WordMiningResult]:
-    return provider.mine_words(texts)
-
-
 def naive_mine_words(texts: list[str], top_n: int = 30) -> list[WordMiningResult]:
-    """AI連携前の仮実装: 文字種の連続で区切る簡易トークナイズと頻度集計。
-
-    形態素解析をしていないため日本語の語境界は粗い。将来は mine_words(AI)に置き換える。
-    """
+    """文字種の連続で区切る簡易トークナイズと頻度集計。日本語の語の区切りは粗い。"""
     counter: Counter[str] = Counter()
     for text in texts:
         counter.update(_TOKEN_PATTERN.findall(text))

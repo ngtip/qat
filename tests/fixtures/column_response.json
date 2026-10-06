@@ -1,0 +1,15 @@
+[
+  {"column": "障害ID", "role": "id", "recommended": false, "reason": "識別用で分析対象外"},
+  {"column": "起票日", "role": "date", "recommended": true, "reason": "発生傾向の時系列分析に使う"},
+  {"column": "発見工程", "role": "category", "recommended": true, "reason": "工程別の検出状況を見る"},
+  {"column": "機能", "role": "category", "recommended": true, "reason": "機能別の品質を比較する"},
+  {"column": "重要度", "role": "severity", "recommended": true, "reason": "影響度で重み付けする"},
+  {"column": "現象", "role": "free_text", "recommended": true, "reason": "障害内容の傾向を分析する"},
+  {"column": "原因区分", "role": "category", "recommended": true, "reason": "原因の偏りを見る"},
+  {"column": "原因詳細", "role": "free_text", "recommended": true, "reason": "根本原因の傾向を見る"},
+  {"column": "対策", "role": "free_text", "recommended": false, "reason": "今回は対象外"},
+  {"column": "担当者", "role": "person", "recommended": false, "reason": "個人評価に使わない"},
+  {"column": "ステータス", "role": "category", "recommended": false, "reason": "進捗管理用"},
+  {"column": "対応工数h", "role": "numeric", "recommended": true, "reason": "対応負荷を見る"},
+  {"column": "存在しない列", "role": "other", "recommended": true, "reason": "無視されるべき項目"}
+]

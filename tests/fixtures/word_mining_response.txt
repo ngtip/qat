@@ -1,0 +1,15 @@
+```json
+[
+  {"term": "二重", "importance": 0.95, "category": "現象"},
+  {"term": "ロールバック", "importance": 0.9, "category": "現象"},
+  {"term": "権限", "importance": 0.9, "category": "原因"},
+  {"term": "異常終了", "importance": 0.85, "category": "現象"},
+  {"term": "文字化け", "importance": 0.6, "category": "現象"},
+  {"term": "仕様書", "importance": 0.7, "category": "原因"},
+  {"term": "設計", "importance": 0.75, "category": "原因"},
+  {"term": "タイムアウト", "importance": 0.8, "category": "現象"},
+  {"term": "合計金額", "importance": 0.65, "category": "機能"},
+  {"term": "本文に無い語", "importance": 0.9, "category": "現象"},
+  {"term": "テスト", "importance": 1.7, "category": "不明なカテゴリ"}
+]
+```

@@ -19,20 +19,21 @@ Write replies to the user in Japanese.
 ## 1. Project facts (read before changing anything)
 
 - Purpose: quality analysis tool. Free-format tabular input -> header detection -> column suggestion -> user column selection -> per-row checks -> quantitative + qualitative (word mining) analysis -> user weighting -> quality score output.
-- Stack: Python 3.11+ (developed/tested on 3.12.10), Streamlit multipage UI, SQLite, pandas, rapidfuzz.
+- Stack: Python 3.11+ (developed/tested on 3.12.10), Streamlit multipage UI, SQLite, pandas, rapidfuzz, openpyxl (Excel export).
 - Package layout: `src/qa_engine` is an installable package (`pyproject.toml`, setuptools). It must be installed editable (`pip install -e .`) or `pages/*.py` imports fail with `ModuleNotFoundError: qa_engine`.
 - Entry point: `app.py` (Streamlit). Pages: `pages/1_取込.py` .. `pages/5_分析結果.py`. Filenames contain Japanese; keep UTF-8.
 - DB: `data/db/quality.sqlite3`, relative path -> Streamlit must be started from the repo root. Created automatically on first start from `src/qa_engine/storage/schema.sql` (`CREATE TABLE IF NOT EXISTS`, no migrations). After changing `schema.sql` in dev, delete `data/db/quality.sqlite3` and restart.
 - All DB access goes through `src/qa_engine/storage/repository.py`. Pages must not contain raw SQL.
 - Cross-page state: current session id lives in `st.session_state` (`src/qa_engine/app_state.py`). It is lost on browser reload / direct URL navigation; navigate via sidebar.
-- AI integration is NOT implemented yet. Current logic is placeholder ("仮実装"):
-  - header detection: `ingestion/naive_parser.py` (first line = header, CSV/TSV). Target: `ingestion/header_detector.py` via `AIProvider.extract_header`.
-  - column suggestion: all columns marked suggested. Target: `AIProvider.suggest_columns`.
-  - word mining: `analysis/qualitative.py::naive_mine_words` (regex char-class split, no morphological analysis). Target: `AIProvider.mine_words`.
-  - scoring: `analysis/scoring.py::naive_calculate_scores` (provisional formula).
-  - duplicate check: `checks/duplicate_check.py` (rapidfuzz, real implementation, O(n^2)).
-- AI providers (`src/qa_engine/ai/`): `AIProvider` interface in `base.py`. `manual_relay_provider.py` = dev-time provider where the prompt is shown in the UI, the human pastes it into the IDE chat (i.e. you, Copilot), and pastes the answer back. Streamlit reruns the script on every interaction, so prompt display and response parsing must be split into two steps using `st.session_state`. `azure_provider.py` (future, production), `local_llm_provider.py` (future, local Qwen etc.) are stubs.
-- Analysis results (structured data in DB) are intentionally separated from presentation (`report/formatter.py`). Output format will change often; do not couple it to analysis logic.
+- AI steps: header detection, column suggestion, word mining. Prompt builders and response parsers live in `src/qa_engine/ai/tasks.py` and are shared by every call target.
+- AI call target is chosen in the sidebar (default from env `QA_AI_PROVIDER`, see `config.py`):
+  - `manual_relay` (default): the UI shows the prompt; the human pastes it into the IDE chat (i.e. you, Copilot, in Ask mode), then pastes your answer back. Prompt display and response import are split via `st.session_state` (`src/qa_engine/ui/ai_step.py`). When you are asked one of these prompts, answer with the requested JSON only.
+  - `naive`: no AI; heuristic fallbacks (`ingestion/header_detector.py`, `ingestion/column_suggester.py`, `analysis/qualitative.py::naive_mine_words`).
+  - `azure` / `local_llm`: `AIProvider.complete(prompt)` stubs that raise `ProviderNotConfiguredError` (not connected yet).
+- Every AI prompt/response is stored in table `ai_interactions` and shown in the results page and Excel report.
+- Analysis and scoring (`analysis/`) are provisional ("暫定"); duplicate check (`checks/duplicate_check.py`) uses rapidfuzz ratio, default threshold 75 on the 現象 column.
+- Results (DB) are separated from presentation (`report/builder.py`, `report/excel_export.py`). Output format will change often; do not couple it to analysis logic.
+- Demo data: `data/samples/bug_tickets_demo.csv` (fictional software bug tickets, 80 rows, 2 preamble lines before the header). Regenerate with `scripts/generate_demo_data.py` (fixed seed). The human demo procedure is `docs/DEMO_RUNBOOK.md`.
 
 ## 2. Obtain the source
 
@@ -81,12 +82,12 @@ $env:PYTHONIOENCODING = 'utf-8'
 .\.venv\Scripts\python.exe scripts\smoke_test.py
 ```
 
-Expected: first line `SMOKE TEST OK`, exit code 0, followed by three rows:
-- 重複行の割合 = 0.5
-- 重み付き語スコア平均 = 0.594
-- 総合品質スコア(仮) = 39.8
+Expected: last line `SMOKE TEST OK`, exit code 0. Key lines before it:
+- `対象件数: 80件`
+- `重複候補がある行: 12件`
+- `Excelのシート: {'サマリ': ..., ..., 'AI処理ログ': 1}` (9 sheets)
 
-The script uses a temp DB (does not touch `data/db/`), compiles `app.py` and all `pages/*.py`, and runs the whole pipeline on `data/samples/sample_defects.csv`. If it fails, fix the environment first; do not edit assertions to make it pass.
+The script uses a temp DB (does not touch `data/db/`), compiles `app.py` and all `pages/*.py`, runs the whole pipeline with the `naive` logic on `data/samples/bug_tickets_demo.csv`, checks the relay response parsers against `tests/fixtures/` (test-only canned responses), and reads the Excel export back. If it fails, fix the environment first; do not edit assertions to make it pass.
 
 ## 6. VS Code configuration
 
@@ -137,19 +138,20 @@ $env:PYTHONIOENCODING = 'utf-8'
 
 ## 8. Manual UI walkthrough (tell the user to do this, or do it if you have browser control)
 
-Use the sidebar to move between pages (not the URL bar).
-1. 取込: upload `data/samples/sample_defects.csv` -> click 取込実行 -> expect `セッション N を作成しました(5列 / 8行)`.
-2. 列選択: uncheck ID, 発生日, 重要度 -> 確定 -> expect `確定しました: 工程, 不具合内容`.
-3. 行チェック: threshold 90 -> 重複チェック実行 -> expect `4 / 8`.
-4. ワードマイニングと重み付け: ワードマイニング実行 -> set 組立 to 1.0 -> 重みを保存 -> expect `保存しました`.
-5. 分析結果: 分析実行 -> table with 3 rows (0.5 / 0.594 / 39.8 when weights match step 4) -> JSON download button available.
+Use the sidebar to move between pages (not the URL bar). For a quick check select `簡易ロジック(AIを使わない)` in the sidebar; the full relay demo with Copilot is described in `docs/DEMO_RUNBOOK.md`.
+1. 取込: upload `data/samples/bug_tickets_demo.csv` -> expect `3行目をヘッダとして検出しました(12列 / 80行)` -> この内容で取込を確定.
+2. 列選択: keep defaults -> 確定 -> expect `確定しました: ...`.
+3. 行チェック: target 現象, threshold 75 -> 重複チェック実行 -> expect `12 / 80`.
+4. ワードマイニングと重み付け: この結果を保存して重み付けへ進む -> 重みを保存 -> expect `保存しました`.
+5. 分析結果: KPI tiles, tabs (分類別 / 推移 / 要注意度 / 要注目障害 / 重複候補 / 重要語 / AI処理ログ), and `Excelレポートをダウンロード` are shown.
 
 ## 9. Known issues / troubleshooting
 
 | Symptom | Cause | Action |
 |---|---|---|
 | `ModuleNotFoundError: qa_engine` | editable install missing or wrong interpreter | re-run `pip install -e .` with `.venv` python; check VS Code interpreter |
-| `sqlite3.OperationalError: table ... has no column named ...` | old DB from previous schema | stop app, delete `data/db/quality.sqlite3`, restart |
+| `sqlite3.OperationalError: table ... has no column named ...` / `no such table: ai_interactions` | old DB from previous schema | stop app, delete `data/db/quality.sqlite3`, restart |
+| 「応答を読み取れませんでした」 in manual relay | the pasted answer has no JSON | ask the chat to answer with JSON only, paste again |
 | Pages 2-5 show 「先に「1. 取込」で…」 | session state lost (reload / URL navigation) | re-run 取込, navigate via sidebar |
 | Mojibake in terminal output | console encoding | set `$env:PYTHONIOENCODING='utf-8'` |
 | Cannot delete `quality.sqlite3` ("busy") | Streamlit still holds the file | stop Streamlit first |

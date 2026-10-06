@@ -20,18 +20,35 @@
    分析結果(構造化データ)とレポート表示(フォーマット)は分離しており、
    出力形式の変更があっても再分析は不要。
 
-## AIプロバイダの切り替え
+## AIの呼び先の切り替え
 
-`src/qa_engine/ai/base.py` の `AIProvider` インターフェースを共通契約とし、以下を切り替えて使う。
+AIに依頼する3工程(ヘッダ検出・列提案・ワードマイニング)のプロンプトと応答の解析は
+`src/qa_engine/ai/tasks.py` にまとめてあり、どの呼び先でも同じものを使う。
+呼び先は画面のサイドバー(既定値は環境変数 `QA_AI_PROVIDER`、`src/qa_engine/config.py`)で切り替える。
 
-- `manual_relay_provider.py` : 開発中、IDE付属チャットに人手で問い合わせる想定のプロバイダ
-  (プロンプトを組み立てて提示し、貼り付けられた応答をパースする)。
-  Streamlitはスクリプト再実行モデルのため、「プロンプト提示」と「応答受け取り」を
-  `st.session_state` で2段階に分けて実装する必要がある(要検討)。
-- `azure_provider.py` : 本番想定、Azure の API を呼び出す。
-- `local_llm_provider.py` : 将来、ローカルのQwenなどを利用する。
+- 手動中継(`manual_relay`、既定): 画面に出るプロンプトをIDEのAIチャット(GitHub Copilot など)に貼り、
+  返ってきた応答を画面に貼り戻す。Streamlitはスクリプト再実行モデルのため、
+  「プロンプト提示」と「応答の取込」を分け、結果を `st.session_state` に保持する(`src/qa_engine/ui/ai_step.py`)。
+- 簡易ロジック(`naive`): AIを使わない仮実装。オフラインでのリハーサル用。
+- Azure OpenAI(`azure`)/ ローカルLLM(`local_llm`): `AIProvider.complete(prompt)` を持つ自動呼び出し型。
+  今は接続先未設定のスタブ(`azure_provider.py` / `local_llm_provider.py`)。
 
-どれを使うかは `src/qa_engine/config.py` で切り替える。
+AIとのやり取り(送ったプロンプトと応答)はすべて `ai_interactions` テーブルに記録し、
+分析結果画面の「AI処理ログ」とExcelレポートで確認できる。
+
+### 判断モデル(Jev型)
+
+選択・判定のような「答えが決まった候補から選ぶ」処理は、文章を生成させずに
+Jev(TypeSafe System One)型の `decide(state, questions)` で確率付きの判断として受け取る
+(`src/qa_engine/ai/decision.py`)。質問の型は Choice(選択)/ Score(段階評価)/ Noul(Yes/No)。
+
+- `SystemOneProvider`: TypeSafe 互換 API(Jev クラウド、ローカルの Ollaya `http://127.0.0.1:11435`)
+- `LogprobDecisionProvider`: OpenAI 互換 API の logprobs から確率を出す(llama-server、Azure OpenAI)
+- `CascadeDecisionProvider`: ルール(`decision_tasks.RuleDecisionProvider`)など軽い段から聞き、
+  確信度が足りない質問だけ重い段へ回す
+
+精度と速度は `scripts/benchmark_decisions.py` で、ダミーデータの正解付きケースを使って比べる
+(使い方はスクリプト冒頭のコメント。結果は `data/bench/` に保存)。
 
 ## DB設計
 
@@ -49,15 +66,20 @@ src/qa_engine/
   ai/                     AIプロバイダの抽象化と実装
   ingestion/              ヘッダ検出・列提案
   checks/                 行別チェック処理(プラグイン的に追加)
-  analysis/               定量・定性分析、スコアリング
+  analysis/               定量・定性分析、スコアリング(暫定ロジック)
   storage/                SQLite接続・スキーマ
-  report/                 出力フォーマット(分析結果から分離)
+  report/                 レポートの組み立てとExcel出力(分析結果から分離)
+  ui/                     画面共通部品(サイドバー、AI工程の実行)
 data/
   db/                     SQLiteファイル置き場(gitignore対象)
-  samples/                動作確認用サンプル入力
+  samples/                動作確認用サンプル入力(架空データ)
 scripts/
   smoke_test.py           UIを介さない全工程の疎通確認(一時DBを使用)
+  generate_demo_data.py   デモ用ダミー障害票の生成(固定シード)
 tests/
+  fixtures/               応答パーサの検証用の固定応答(検証専用)
+docs/
+  DEMO_RUNBOOK.md         会社PCでのデモ手順(人が読む用)
 SETUP_FOR_AI.md           別PCでAIエージェントに環境構築させるための手順書
 ```
 
@@ -71,7 +93,7 @@ python -m venv .venv
 ```
 
 プロジェクトルートで起動すること(DBパスが相対パスのため)。動作確認用に
-`data/samples/sample_defects.csv` を用意している。
+ソフト開発の障害票を模した架空データ `data/samples/bug_tickets_demo.csv`(80件)を用意している。
 
 ページ間の状態(現在のセッションID)は `st.session_state` で保持しているため、
 ページ移動はサイドバーから行う(URL直打ちやリロードでは状態が消える)。

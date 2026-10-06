@@ -1,19 +1,12 @@
-"""将来、ローカルのQwen等を利用するプロバイダ。"""
+"""ローカルLLM(OpenAI互換APIを持つ llama-server など)を呼び出すプロバイダ。接続は今後実装する。"""
 
-from qa_engine.ai.base import AIProvider, ColumnSuggestion, HeaderInfo, WordMiningResult
+from qa_engine.ai.base import AIProvider, ProviderNotConfiguredError
 
 
 class LocalLLMProvider(AIProvider):
-    def __init__(self, model_path: str):
-        self.model_path = model_path
+    def __init__(self, base_url: str | None, model: str | None):
+        self.base_url = base_url
+        self.model = model
 
-    def extract_header(self, raw_text: str) -> HeaderInfo:
-        raise NotImplementedError
-
-    def suggest_columns(
-        self, headers: list[str], sample_rows: list[dict]
-    ) -> list[ColumnSuggestion]:
-        raise NotImplementedError
-
-    def mine_words(self, texts: list[str]) -> list[WordMiningResult]:
-        raise NotImplementedError
+    def complete(self, prompt: str) -> str:
+        raise ProviderNotConfiguredError("ローカルLLMの接続先は未設定です(今後対応予定)。")
